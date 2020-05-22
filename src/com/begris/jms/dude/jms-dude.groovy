@@ -282,7 +282,7 @@ new ActiveMQConnectionFactory(brokerURL: brokerOrBashCompletion?.brokerDependent
 
     def messages = browser.enumeration.iterator().collect()
 
-    printOutput(System.out, outputType(), messages, "\nSelected messages from ${queue}\n", (selectorAvailable()) ? "Used selector: ${forwardDependent.selector}" : null)
+    printOutput(System.out, outputType(), messages, "\nSelected messages from ${jmsQueue.queueName}\n", (selectorAvailable()) ? "Used selector: ${forwardDependent.selector}" : "")
 
     if (forwardActive()) {
         def forwardedMessages = []
