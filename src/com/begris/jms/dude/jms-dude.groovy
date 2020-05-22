@@ -336,13 +336,15 @@ def createCopy = {
 new ActiveMQConnectionFactory(brokerURL: brokerOrBashCompletion?.brokerDependent?.brokerUrl)
         .createQueueConnection(brokerOrBashCompletion?.brokerDependent?.user, brokerOrBashCompletion?.brokerDependent?.password?.toString()).with {
     start()
-    Session session = createSession(false, Session.AUTO_ACKNOWLEDGE)
+    Session session = createSession(true, Session.CLIENT_ACKNOWLEDGE)
     def jmsQueue = session.createQueue(brokerOrBashCompletion?.brokerDependent?.queue)
     QueueBrowser browser = selectorAvailable() ? session.createBrowser(jmsQueue, forwardDependent.selector) : session.createBrowser(jmsQueue)
 
     def messages = browser.enumeration.iterator().collect()
 
     printOutput(System.out, outputType(), messages, "\nSelected messages from ${jmsQueue.queueName}\n", (selectorAvailable()) ? "Used selector: ${forwardDependent.selector}" : "")
+
+
 
     if (forwardActive()) {
         if (forwardValid()) {
@@ -375,9 +377,16 @@ new ActiveMQConnectionFactory(brokerURL: brokerOrBashCompletion?.brokerDependent
             cli().err.println "Forward target invalid: ${forwardDependent.forward}"
         }
     }
+
+    if (delete) {
         messages.each {
+            Message msg ->
+                def messageToDelete = session.createConsumer(jmsQueue, "JMSMessageID = '${msg.JMSMessageID}'").receive(120)
+                messageToDelete?.acknowledge()
+                cli().err.println "Deleting message: ${messageToDelete?.JMSMessageID}"
         }
     }
+    session.commit()
     close()
 }
 
