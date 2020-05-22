@@ -288,8 +288,25 @@ def printOutput = {
 
 def copyHeaderAndProperties = {
     Message oldMessage, Message newMessage ->
-        oldMessage.propertyNames.iterator().each {
-            property ->
+        def propertiesToCopy = []
+
+        if(exclusiveProperties != null) {
+            if(exclusiveProperties.allProperties) {
+                propertiesToCopy = oldMessage.properties.iterator().collect { it }
+            } else if (!exclusiveProperties?.propertyList?.isEmpty()) {
+                exclusiveProperties.propertyList.each {
+                    pattern ->
+                        oldMessage.properties.findAll { property -> property.key ==~ pattern }.each {
+                            propertiesToCopy << it.key
+                        }
+                }
+            }
+        } else {
+            propertiesToCopy << oldMessage.properties.collect { it.key }
+        }
+
+        propertiesToCopy.each {
+            String property ->
                 newMessage.setObjectProperty(property, oldMessage.getObjectProperty(property))
         }
         newMessage.JMSCorrelationID = oldMessage.JMSCorrelationID
