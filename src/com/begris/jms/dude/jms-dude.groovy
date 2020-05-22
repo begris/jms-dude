@@ -144,6 +144,24 @@ def forwardDestination = { ->
     return forwardDependent.forward.find(/[^\/]+$/)
 }
 
+
+def retrieveProperties = {
+    Message msg ->
+        def messageProperties = [:]
+        if(exclusiveProperties != null) {
+            if (exclusiveProperties.allProperties) {
+                return msg.properties.collectEntries { [(it.key): (it.value instanceof UTF8Buffer) ? it.value.toString() : it.value] }
+            } else if (!exclusiveProperties?.propertyList?.isEmpty()) {
+                exclusiveProperties.propertyList.each {
+                    pattern ->
+                        messageProperties << msg.properties.findAll { property -> property.key ==~ pattern }
+                                .collectEntries { [(it.key): (it.value instanceof UTF8Buffer) ? it.value.toString() : it.value] }
+                }
+                return messageProperties
+            }
+        }
+        return messageProperties
+}
 enum OUTPUT {
     TABLE, JSON, DUMP
 }
@@ -162,7 +180,7 @@ def outputTable = {
         table.column("Properties").alignLeft()
 
         if(header != null) {
-            header.findAll { !it?.isBlank() } each {
+            header.findAll { !(it==null && it?.isBlank()) } each {
                 stream.println it
             }
         }
@@ -170,7 +188,7 @@ def outputTable = {
         messages.each {
             Message message ->
                 def row = table.addRow()
-                row.addContent(message.JMSMessageID, message.JMSType, message.JMSCorrelationID, Instant.ofEpochMilli(message.JMSTimestamp), message.propertyNames.iterator().collect())
+                row.addContent(message.JMSMessageID, message.JMSType, message.JMSCorrelationID, Instant.ofEpochMilli(message.JMSTimestamp), retrieveProperties(message) )
         }
 
         table.print(stream)
