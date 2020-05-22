@@ -3,7 +3,7 @@ package com.begris.jms.dude
 
 import groovy.json.JsonBuilder
 @Grab('info.picocli:picocli-groovy:4.3.2')
-@GrabConfig(systemClassLoader=true)
+@GrabConfig(systemClassLoader = true)
 import picocli.CommandLine
 import picocli.groovy.PicocliScript
 
@@ -18,10 +18,11 @@ import javax.jms.*
         mixinStandardHelpOptions = true, // add --help and --version options
         description = "@|bold Groovy script|@ @|underline jms-dude|@",
         version = '1.0.0-Snapshot'
-        )
+)
 @PicocliScript
 import groovy.transform.Field
 
+import java.nio.ByteBuffer
 import java.time.Instant
 
 // PicocliBaseScript prints usage help or version if requested by the user
@@ -38,13 +39,21 @@ import java.time.Instant
 @CommandLine.Option(names = ["-q", "--queue"], description = "The queue to browse", required = true)
 @Field String queue
 
-@CommandLine.Option(names = ["-s", "--selector"], description = "JMS message selector")
-@Field String selector
+@CommandLine.ArgGroup(exclusive = false, multiplicity = "0..1")
+@Field ForwardDependent forwardDependent
+
+class ForwardDependent {
+    @CommandLine.Option(names = ["-f", "--forward"], description = "The queue or topic to forward messages to. Format queue://name | topic://name", required = false)
+    String forward
+
+    @CommandLine.Option(names = ["-s", "--selector"], description = "JMS message selector", required = true)
+    String selector
+}
 
 @CommandLine.ArgGroup(exclusive = true, multiplicity = "0..1")
-@Field Exclusive output
+@Field ExclusiveOutput output
 
-class Exclusive {
+class ExclusiveOutput {
     @CommandLine.Option(names = ["-t", "--table"], description = "show messages as table", required = true)
     boolean table
 
@@ -55,27 +64,34 @@ class Exclusive {
     boolean jsonOutput
 }
 
-@CommandLine.Option(names = ["-c", "--count"], description = "number of repetitions")
-@Field int count = 1;
-
-
-count.times {
-    println "hi"
-}
 // the CommandLine that parsed the args is available as a property
 assert this.commandLine.commandName == "jms-dude"
 
-println queue
-println selector
+def selectorAvailable = { -> !(forwardDependent.selector == null || forwardDependent.selector?.isBlank()) }
 
-def selectorAvailable = { -> !(selector == null || selector?.isBlank()) }
+def forwardActive = { -> !(forwardDependent.forward == null || forwardDependent.forward?.isBlank()) }
 
-enum OUTPUT { TABLE, JSON, DUMP }
-def outputType = { -> output == null || output.table ? OUTPUT.TABLE : output.jsonOutput ? OUTPUT.JSON : output.dump ? OUTPUT.DUMP : OUTPUT.TABLE }
+enum FORWARDTYPE { QUEUE, TOPIC }
+
+def forwardType = { ->
+    def type = forwardDependent.forward.find(/^[^:]+/)
+    return FORWARDTYPE.valueOf(type.toUpperCase())
+}
+
+def forwardDestination = { ->
+    return forwardDependent.forward.find(/[^\/]+$/)
+}
+
+enum OUTPUT {
+    TABLE, JSON, DUMP
+}
+
+def outputType = { ->
+    output == null || output.table ? OUTPUT.TABLE : output.jsonOutput ? OUTPUT.JSON : output.dump ? OUTPUT.DUMP : OUTPUT.TABLE }
 
 
 def outputTable = {
-    stream, messages ->
+    PrintStream stream, messages, String... header ->
         ShellTable table = new ShellTable().emptyTableText("no messges found")
         table.column("JMSMessageId").alignLeft()
         table.column("JMSType").alignLeft()
@@ -83,7 +99,11 @@ def outputTable = {
         table.column("JMSTimestamp").alignLeft()
         table.column("Properties").alignLeft()
 
-        if (selectorAvailable()) println "Used selector: ${selector}"
+        if(header != null) {
+            header.findAll { !it?.isBlank() } each {
+                stream.println it
+            }
+        }
 
         messages.each {
             Message message ->
@@ -92,79 +112,116 @@ def outputTable = {
         }
 
         table.print(stream)
+        stream.println ""
 }
 
 def outputJson = {
     stream, messages ->
         def json = new JsonBuilder()
-        def messageMap =  messages.collectEntries { [(it.JMSMessageID): it] }
+        def messageMap = messages.collectEntries { [(it.JMSMessageID): it] }
         json messageMap
         json.writeTo(stream)
 }
 
 def outputDump = {
-    messages ->
-        println it
+    stream, messages, String... header ->
+        messages.each {
+            println it
+        }
 }
 
+def printOutput = {
+    PrintStream outStream, OUTPUT type, messages, String... header ->
+        switch (type) {
+            case OUTPUT.JSON:
+                outputJson(outStream, messages)
+                break
+            case OUTPUT.DUMP:
+                outputDump(outStream, messages, header)
+                break
+            case OUTPUT.TABLE:
+            default:
+                outputTable(outStream, messages, header)
+                break
+        }
+}
 
-new ActiveMQConnectionFactory(brokerURL: brokerUrl).createQueueConnection(user, password).with {
+def copyHeaderAndProperties = {
+    Message oldMessage, Message newMessage ->
+        oldMessage.propertyNames.iterator().each {
+            property ->
+                newMessage.setObjectProperty(property, oldMessage.getObjectProperty(property))
+        }
+        newMessage.JMSCorrelationID = oldMessage.JMSCorrelationID
+        newMessage.JMSDestination = oldMessage.JMSDestination
+        newMessage.JMSMessageID = oldMessage.JMSMessageID
+        newMessage.JMSReplyTo = oldMessage.JMSReplyTo
+        newMessage.JMSType = oldMessage.JMSType
+
+        return newMessage
+}
+
+def createCopy = {
+    Session session, Message oldMessage ->
+        def newMessage
+        switch (oldMessage.class) {
+            case TextMessage:
+                newMessage = session.createTextMessage((oldMessage as TextMessage).text)
+                break
+            case BytesMessage:
+                newMessage = session.createBytesMessage()
+                oldMessage = (BytesMessage) oldMessage
+                ByteBuffer buffer = ByteBuffer.allocate(oldMessage.bodyLength.intValue())
+                oldMessage.readBytes(buffer.array())
+                newMessage.writeBytes(buffer.array())
+                break
+            case StreamMessage:
+                newMessage = session.createTextMessage()
+                break
+            case ObjectMessage:
+                newMessage = session.createTextMessage()
+                break
+            case MapMessage:
+                newMessage = session.createTextMessage()
+                break
+            case Message:
+                newMessage = session.createTextMessage()
+                break
+            default:
+                throw new IllegalArgumentException("No vaild jms message " + oldMessage.class.toString())
+        }
+        return copyHeaderAndProperties(oldMessage, newMessage)
+}
+
+new ActiveMQConnectionFactory(brokerURL: brokerUrl).createQueueConnection(user, password.toString()).with {
     start()
-    QueueSession session = createQueueSession(false, Session.AUTO_ACKNOWLEDGE)
+    Session session = createSession(false, Session.AUTO_ACKNOWLEDGE)
     def jmsQueue = session.createQueue(queue)
-    QueueBrowser browser = selectorAvailable() ? session.createBrowser(jmsQueue, selector) : session.createBrowser(jmsQueue)
+    QueueBrowser browser = selectorAvailable() ? session.createBrowser(jmsQueue, forwardDependent.selector) : session.createBrowser(jmsQueue)
 
-//    ShellTable table = new ShellTable().emptyTableText("no messges found")
-//    table.column("JMSMessageId").alignLeft()
-//    table.column("JMSType").alignLeft()
-//    table.column("JMSCorrelationId").alignLeft()
-//    table.column("JMSTimestamp").alignLeft()
-//    table.column("Properties").alignLeft()
-//
-//    if (selectorAvailable()) println "Used selector: ${browser.messageSelector}"
+    def messages = browser.enumeration.iterator().collect()
 
-//    println output.properties
+    printOutput(System.out, outputType(), messages, "\nSelected messages from ${queue}\n", (selectorAvailable()) ? "Used selector: ${forwardDependent.selector}" : null)
 
-    def messages = browser.enumeration.iterator()
-
-    switch (outputType()) {
-        case OUTPUT.TABLE:
-            println "table"
-            outputTable(System.out, messages)
-            break
-        case OUTPUT.JSON:
-            println "json"
-            outputJson(System.out, messages)
-            break
-        case OUTPUT.DUMP:
-            println "dump"
-            outputTable(System.out, messages)
-            break
+    if (forwardActive()) {
+        def forwardedMessages = []
+        messages.each {
+            Message message ->
+                def newMessage = createCopy(session, message)
+                def destination
+                switch (forwardType()) {
+                    case FORWARDTYPE.QUEUE:
+                        destination = session.createQueue(forwardDestination())
+                        break
+                    case FORWARDTYPE.TOPIC:
+                        destination = session.createTopic(forwardDestination())
+                        break
+                }
+                session.createProducer(destination).send(newMessage, message.JMSDeliveryMode, message.JMSPriority, message.JMSExpiration)
+                forwardedMessages << newMessage
+        }
+        printOutput(System.out, outputType(), forwardedMessages, "\nForwarded messages\n", "Destination: ${forwardDependent.forward}")
     }
-
-//
-//    browser.enumeration.iterator().each {
-//        Message message ->
-//            def row = table.addRow()
-//            row.addContent(message.JMSMessageID, message.JMSType, message.JMSCorrelationID, Instant.ofEpochMilli(message.JMSTimestamp), message.propertyNames.iterator().collect())
-//    }
-
-
-
-//    table.print(System.out)
-//
-//    list.each() {
-//        entry ->
-//            println entry
-//            TextMessage message = session.createTextMessage('Employee '+entry)
-//            message.setJMSType('EMPLOYEE_MASTERDATA_V1.0.0')
-//            message.setJMSDeliveryMode(DeliveryMode.PERSISTENT)
-//            message.setJMSReplyTo(session.createTemporaryTopic())
-//            message.setJMSCorrelationID(UUID.randomUUID().toString())
-//            message.setLongProperty('EMP_ID', entry)
-//
-//            publisher.publish(message)
-//    }
     close()
 }
 
