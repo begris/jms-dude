@@ -1,3 +1,8 @@
+# Created by .ignore support plugin (hsz.mobi)
+/.idea/**
+/out/**
+*.iml
+
 # Compiled class file
 *.class
 
