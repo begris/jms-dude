@@ -129,7 +129,9 @@ if (brokerOrBashCompletion.autoCompletion) {
 
 
 def selectorAvailable = { -> !(forwardDependent?.selector == null || forwardDependent.selector?.isBlank()) }
+
 def forwardActive = { -> !(forwardDependent.forward == null || forwardDependent.forward?.isBlank()) }
+def forwardValid = { -> forwardDependent.forward ==~ /^(?i)(queue|topic):\/\/(\S)+$/ }
 
 enum FORWARDTYPE { QUEUE, TOPIC }
 
