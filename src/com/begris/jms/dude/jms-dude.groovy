@@ -128,20 +128,20 @@ if (brokerOrBashCompletion.autoCompletion) {
 //assert brokerDependent != null
 
 
-def selectorAvailable = { -> !(forwardDependent?.selector == null || forwardDependent.selector?.isBlank()) }
+def selectorAvailable = { -> !(forwardDependent?.selector == null || forwardDependent?.selector?.isBlank()) }
 
-def forwardActive = { -> !(forwardDependent.forward == null || forwardDependent.forward?.isBlank()) }
-def forwardValid = { -> forwardDependent.forward ==~ /^(?i)(queue|topic):\/\/(\S)+$/ }
+def forwardActive = { -> !(forwardDependent?.forward == null || forwardDependent?.forward?.isBlank()) }
+def forwardValid = { -> forwardDependent?.forward ==~ /^(?i)(queue|topic):\/\/(\S)+$/ }
 
 enum FORWARDTYPE { QUEUE, TOPIC }
 
 def forwardType = { ->
-    def type = forwardDependent.forward.find(/^[^:]+/)
+    def type = forwardDependent?.forward.find(/^[^:]+/)
     return FORWARDTYPE.valueOf(type.toUpperCase())
 }
 
 def forwardDestination = { ->
-    return forwardDependent.forward.find(/[^\/]+$/)
+    return forwardDependent?.forward.find(/[^\/]+$/)
 }
 
 def printDestination = {
