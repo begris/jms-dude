@@ -1,7 +1,8 @@
 #!/bin/groovy
 package com.begris.jms.dude
 
-import groovy.json.JsonBuilder
+import org.apache.activemq.command.ActiveMQBlobMessage
+import org.fusesource.hawtbuf.UTF8Buffer
 @Grab('info.picocli:picocli-groovy:4.3.2')
 @GrabConfig(systemClassLoader = true)
 import picocli.CommandLine
@@ -9,6 +10,7 @@ import picocli.groovy.PicocliScript
 
 @Grab('org.apache.karaf.shell:org.apache.karaf.shell.table:4.2.8')
 import org.apache.karaf.shell.table.*
+import groovy.json.JsonBuilder
 
 @Grab('org.apache.activemq:activemq-all:5.15.12')
 import org.apache.activemq.ActiveMQConnectionFactory
@@ -16,8 +18,15 @@ import javax.jms.*
 
 @CommandLine.Command(name = "jms-dude",
         mixinStandardHelpOptions = true, // add --help and --version options
-        description = "@|bold Groovy script|@ @|underline jms-dude|@",
-        version = '1.0.0-Snapshot'
+        version = '1.0.0-Snapshot',
+        sortOptions = false,
+        headerHeading = "Usage:%n%n",
+        synopsisHeading = "%n",
+        descriptionHeading = "%nDescription:%n%n",
+        parameterListHeading = "%nParameters:%n",
+        optionListHeading = "%nOptions:%n",
+        header = "@|bold Groovy script|@ @|underline jms-dude|@",
+        description = "Browse and dumps messages on a jms queue with optional forwarding of messages"
 )
 @PicocliScript
 import groovy.transform.Field
@@ -27,47 +36,85 @@ import java.time.Instant
 
 // PicocliBaseScript prints usage help or version if requested by the user
 
-@CommandLine.Option(names = ["-b", "--broker"], description = "AMQ broker url to query", required = true)
-@Field String brokerUrl
 
-@CommandLine.Option(names = ["-u", "--user"], description = "User for AMQ")
-@Field String user
+class BrokerDependent {
+    @CommandLine.Option(order = 1, names = ["-b", "--broker"], description = "AMQ broker url to query", required = true)
+    String brokerUrl
 
-@CommandLine.Option(names = ["-p", "--password"], description = "Password for AMQ", interactive = true)
-@Field char[] password
+    @CommandLine.Option(order = 2, names = ["-u", "--user"], description = "User for AMQ")
+    String user
 
-@CommandLine.Option(names = ["-q", "--queue"], description = "The queue to browse", required = true)
-@Field String queue
+    @CommandLine.Option(order = 3, names = ["-P", "--password"], description = "Password for AMQ", arity = "0..1", interactive = true)
+    char[] password
+
+    @CommandLine.Option(order = 4, names = ["-q", "--queue"], description = "The queue to browse", required = true)
+    String queue
+}
+
+@CommandLine.ArgGroup(exclusive = true, multiplicity = "1")
+@Field BrokerOrBashCompletion brokerOrBashCompletion
+
+class BrokerOrBashCompletion {
+    @CommandLine.Option(order = 0, names = ["--auto-completion"], description = "Genereate bash-completion script for jms-dude - script stops after genereation", defaultValue = "false")
+    boolean autoCompletion
+
+    @CommandLine.ArgGroup(exclusive = false, multiplicity = "0..1")
+    BrokerDependent brokerDependent
+}
 
 @CommandLine.ArgGroup(exclusive = false, multiplicity = "0..1")
 @Field ForwardDependent forwardDependent
 
 class ForwardDependent {
-    @CommandLine.Option(names = ["-f", "--forward"], description = "The queue or topic to forward messages to. Format queue://name | topic://name", required = false)
+    @CommandLine.Option(order = 4, names = ["-f", "--forward"], description = "The queue or topic to forward messages to. Format queue://name | topic://name", required = false)
     String forward
 
-    @CommandLine.Option(names = ["-s", "--selector"], description = "JMS message selector", required = true)
+    @CommandLine.Option(order = 5, names = ["-s", "--selector"], description = "JMS message selector", required = true)
     String selector
+}
+
+@CommandLine.Option(order = 6, names = ["-d", "--delete"], description = "delete processed messages from queue", required = false)
+@Field boolean delete
+
+@CommandLine.ArgGroup(exclusive = true, multiplicity = "0..1")
+@Field ExclusiveProperties exclusiveProperties
+
+class ExclusiveProperties {
+    @CommandLine.Option(order = 6, names = ["-a", "--all"], description = "retrieve all message porperties", required = true)
+    boolean allProperties
+
+    @CommandLine.Option(order = 7, names = ["-p", "--properties"], description = ["message properties to retrieve", "property names are treated as regular expressions"], paramLabel = "property name", required = true, split = ',')
+    List<String> propertyList
 }
 
 @CommandLine.ArgGroup(exclusive = true, multiplicity = "0..1")
 @Field ExclusiveOutput output
 
+class JsonOutputConfiguration {
+
+    @CommandLine.Option(order = 11, names = ["-j", "--json"], description = "output in json format", required = true)
+    boolean jsonOutput
+
+    @CommandLine.Option(order = 12, names = ["-c", "--body"], description = "dumps the message body (json only)", required = false)
+    boolean dumpBody
+}
+
 class ExclusiveOutput {
-    @CommandLine.Option(names = ["-t", "--table"], description = "show messages as table", required = true)
+    @CommandLine.Option(order = 9, names = ["-t", "--table"], description = "show messages as table", required = true)
     boolean table
 
-    @CommandLine.Option(names = ["-d", "--dump"], description = "dump messages", required = true)
+    @CommandLine.Option(order = 10, names = ["--dump"], description = "dump messages", required = true)
     boolean dump
 
-    @CommandLine.Option(names = ["-j", "--json"], description = "output in json format", required = true)
-    boolean jsonOutput
+    @CommandLine.ArgGroup(exclusive = false, multiplicity = "0..1")
+    JsonOutputConfiguration jsonOutputConfiguration
 }
 
 // the CommandLine that parsed the args is available as a property
 assert this.commandLine.commandName == "jms-dude"
 
 def selectorAvailable = { -> !(forwardDependent.selector == null || forwardDependent.selector?.isBlank()) }
+def cli = { -> (CommandLine) this.commandLine }
 
 def forwardActive = { -> !(forwardDependent.forward == null || forwardDependent.forward?.isBlank()) }
 
@@ -87,7 +134,7 @@ enum OUTPUT {
 }
 
 def outputType = { ->
-    output == null || output.table ? OUTPUT.TABLE : output.jsonOutput ? OUTPUT.JSON : output.dump ? OUTPUT.DUMP : OUTPUT.TABLE }
+    output == null || output.table ? OUTPUT.TABLE : output?.jsonOutputConfiguration?.jsonOutput ? OUTPUT.JSON : output.dump ? OUTPUT.DUMP : OUTPUT.TABLE }
 
 
 def outputTable = {
@@ -193,10 +240,11 @@ def createCopy = {
         return copyHeaderAndProperties(oldMessage, newMessage)
 }
 
-new ActiveMQConnectionFactory(brokerURL: brokerUrl).createQueueConnection(user, password.toString()).with {
+new ActiveMQConnectionFactory(brokerURL: brokerOrBashCompletion?.brokerDependent?.brokerUrl)
+        .createQueueConnection(brokerOrBashCompletion?.brokerDependent?.user, brokerOrBashCompletion?.brokerDependent?.password?.toString()).with {
     start()
     Session session = createSession(false, Session.AUTO_ACKNOWLEDGE)
-    def jmsQueue = session.createQueue(queue)
+    def jmsQueue = session.createQueue(brokerOrBashCompletion?.brokerDependent?.queue)
     QueueBrowser browser = selectorAvailable() ? session.createBrowser(jmsQueue, forwardDependent.selector) : session.createBrowser(jmsQueue)
 
     def messages = browser.enumeration.iterator().collect()
