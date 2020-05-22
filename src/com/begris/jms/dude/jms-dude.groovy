@@ -154,7 +154,7 @@ def outputType = { ->
 
 def outputTable = {
     PrintStream stream, messages, String... header ->
-        ShellTable table = new ShellTable().emptyTableText("no messges found")
+        ShellTable table = new ShellTable().emptyTableText("no messages found")
         table.column("JMSMessageId").alignLeft()
         table.column("JMSType").alignLeft()
         table.column("JMSCorrelationId").alignLeft()
