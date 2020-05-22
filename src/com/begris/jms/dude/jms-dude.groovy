@@ -6,6 +6,7 @@ import org.fusesource.hawtbuf.UTF8Buffer
 @Grab('info.picocli:picocli-groovy:4.3.2')
 @GrabConfig(systemClassLoader = true)
 import picocli.CommandLine
+import picocli.AutoComplete
 import picocli.groovy.PicocliScript
 
 @Grab('org.apache.karaf.shell:org.apache.karaf.shell.table:4.2.8')
@@ -110,12 +111,24 @@ class ExclusiveOutput {
     JsonOutputConfiguration jsonOutputConfiguration
 }
 
+@CommandLine.Parameters(paramLabel = 'FILE', arity = '0..1', description = 'messages to send')
+@Field File[] messageFiles
+
 // the CommandLine that parsed the args is available as a property
 assert this.commandLine.commandName == "jms-dude"
 
-def selectorAvailable = { -> !(forwardDependent.selector == null || forwardDependent.selector?.isBlank()) }
 def cli = { -> (CommandLine) this.commandLine }
 
+if (brokerOrBashCompletion.autoCompletion) {
+
+    print AutoComplete.bash(cli().commandName, cli())
+    System.exit 0
+}
+
+//assert brokerDependent != null
+
+
+def selectorAvailable = { -> !(forwardDependent?.selector == null || forwardDependent.selector?.isBlank()) }
 def forwardActive = { -> !(forwardDependent.forward == null || forwardDependent.forward?.isBlank()) }
 
 enum FORWARDTYPE { QUEUE, TOPIC }
