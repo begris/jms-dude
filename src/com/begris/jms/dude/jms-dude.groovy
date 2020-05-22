@@ -144,6 +144,18 @@ def forwardDestination = { ->
     return forwardDependent.forward.find(/[^\/]+$/)
 }
 
+def printDestination = {
+    destination ->
+        if (destination != null) {
+            if (destination instanceof Queue) {
+                return 'queue://' + destination.queueName
+            } else if (destination instanceof Topic) {
+                return 'topic://' + destination.topicName
+            } else {
+                return 'n/a'
+            }
+        } else return 'n/a'
+}
 
 def retrieveProperties = {
     Message msg ->
@@ -162,6 +174,30 @@ def retrieveProperties = {
         }
         return messageProperties
 }
+
+def retrieveBody = {
+    Message msg ->
+        switch (msg.class) {
+            case TextMessage:
+                return (msg as TextMessage).text
+            case BytesMessage:
+                msg = (BytesMessage) msg
+                ByteBuffer buffer = ByteBuffer.allocate(msg.bodyLength.intValue())
+                msg.readBytes(buffer.array())
+                return buffer.array().encodeBase64().toString()
+            case StreamMessage:
+                return (msg as StreamMessage).toString()
+            case ObjectMessage:
+                return (msg as ObjectMessage).getObject()
+            case MapMessage:
+                return (msg as MapMessage).mapNames.iterator().collectEntries { it: (msg as MapMessage).getObject(it) }
+            case Message:
+                break
+            default:
+                throw new IllegalArgumentException("No vaild jms message " + msg.class.toString())
+        }
+}
+
 enum OUTPUT {
     TABLE, JSON, DUMP
 }
@@ -196,11 +232,35 @@ def outputTable = {
 }
 
 def outputJson = {
-    stream, messages ->
+    stream, Collection messages ->
         def json = new JsonBuilder()
-        def messageMap = messages.collectEntries { [(it.JMSMessageID): it] }
-        json messageMap
-        json.writeTo(stream)
+        def messageMap = messages.collectEntries {
+            Message msg ->
+                [(msg): [
+                        JMSMessageId    : msg.JMSMessageID,
+                        JMSType         : msg.JMSType,
+                        JMSDestination  : "${printDestination(msg.JMSDestination)}",
+                        JMSCorrelationId: msg.JMSCorrelationID,
+                        JMSTimestamp    : msg.JMSTimestamp,
+                        JMSTimestampUTC : Instant.ofEpochMilli(msg.JMSTimestamp).toString(),
+                        JMSExpiration   : msg.JMSExpiration,
+                        JMSPriority     : msg.JMSPriority,
+                        JMSReplyTo      : msg.JMSReplyTo,
+                        JMSDeliveryMode : msg.JMSDeliveryMode,
+                        JMSRedelivered  : msg.JMSRedelivered
+                ]]
+        }
+        messageMap.findAll { !it.key.properties?.isEmpty() }.each {
+            it.value << [ Properties: retrieveProperties(it.key) ]
+        }
+        if(output.jsonOutputConfiguration?.dumpBody) {
+            messageMap.each {
+                it.value << [ Body: retrieveBody(it.key) ]
+            }
+        }
+
+        json messageMap.values().collect()
+        stream.println json.toPrettyString()
 }
 
 def outputDump = {
