@@ -345,23 +345,38 @@ new ActiveMQConnectionFactory(brokerURL: brokerOrBashCompletion?.brokerDependent
     printOutput(System.out, outputType(), messages, "\nSelected messages from ${jmsQueue.queueName}\n", (selectorAvailable()) ? "Used selector: ${forwardDependent.selector}" : "")
 
     if (forwardActive()) {
-        def forwardedMessages = []
-        messages.each {
-            Message message ->
-                def newMessage = createCopy(session, message)
-                def destination
-                switch (forwardType()) {
-                    case FORWARDTYPE.QUEUE:
-                        destination = session.createQueue(forwardDestination())
-                        break
-                    case FORWARDTYPE.TOPIC:
-                        destination = session.createTopic(forwardDestination())
-                        break
-                }
-                session.createProducer(destination).send(newMessage, message.JMSDeliveryMode, message.JMSPriority, message.JMSExpiration)
-                forwardedMessages << newMessage
+        if (forwardValid()) {
+            def forwardedMessages = []
+
+            def destination
+            switch (forwardType()) {
+                case FORWARDTYPE.QUEUE:
+                    destination = session.createQueue(forwardDestination())
+                    break
+                case FORWARDTYPE.TOPIC:
+                    destination = session.createTopic(forwardDestination())
+                    break
+            }
+            def producer = session.createProducer(destination)
+
+            messages.each {
+                Message message ->
+                    def newMessage = createCopy(session, message)
+                    producer.send(newMessage, message.JMSDeliveryMode, message.JMSPriority, message.JMSExpiration)
+                    forwardedMessages << newMessage
+            }
+
+            if (outputType() == OUTPUT.TABLE) {
+                printOutput(System.out, outputType(), forwardedMessages, "\nForwarded messages\n", "Destination: ${forwardDependent.forward}")
+            } else {
+                cli().err.println "Forwarded ${forwardedMessages.size()} ${(forwardedMessages.size() > 1) ? 'messages' : 'message'}"
+            }
+        } else {
+            cli().err.println "Forward target invalid: ${forwardDependent.forward}"
         }
-        printOutput(System.out, outputType(), forwardedMessages, "\nForwarded messages\n", "Destination: ${forwardDependent.forward}")
+    }
+        messages.each {
+        }
     }
     close()
 }
