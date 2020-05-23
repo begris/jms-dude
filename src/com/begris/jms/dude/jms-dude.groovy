@@ -219,7 +219,7 @@ def outputTable = {
         table.column("Properties").alignLeft()
 
         if(header != null) {
-            header.findAll { !(it==null && it?.isBlank()) } each {
+            header.findAll { !(it==null && it?.isBlank()) }.each {
                 stream.println it
             }
         }
