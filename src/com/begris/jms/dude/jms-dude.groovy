@@ -56,7 +56,7 @@ class BrokerDependent {
 @Field BrokerOrBashCompletion brokerOrBashCompletion
 
 class BrokerOrBashCompletion {
-    @CommandLine.Option(order = 0, names = ["--auto-completion"], description = "Genereate bash-completion script for jms-dude - script stops after genereation", defaultValue = "false")
+    @CommandLine.Option(order = 0, names = ["--auto-completion"], description = "Genereate bash-completion script for jms-dude", defaultValue = "false")
     boolean autoCompletion
 
     @CommandLine.ArgGroup(exclusive = false, multiplicity = "0..1")
