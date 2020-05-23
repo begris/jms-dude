@@ -305,8 +305,6 @@ def copyHeaderAndProperties = {
                         }
                 }
             }
-        } else {
-            propertiesToCopy << oldMessage.properties.collect { it.key }
         }
 
         propertiesToCopy.each {
