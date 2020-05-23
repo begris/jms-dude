@@ -363,9 +363,7 @@ new ActiveMQConnectionFactory(brokerURL: brokerOrBashCompletion?.brokerDependent
 
     def messages = browser.enumeration.iterator().collect()
 
-    printOutput(System.out, outputType(), messages, "\nSelected messages from ${jmsQueue.queueName}\n", (selectorAvailable()) ? "Used selector: ${forwardDependent.selector}" : "")
-
-
+    printOutput(System.out, outputType(), messages, ansiString("\nSelected messages from @|bold,yellow queue://${jmsQueue.queueName}|@"), (selectorAvailable()) ? "Used selector: ${forwardDependent.selector}\n" : "")
 
     if (forwardActive()) {
         if (forwardValid()) {
@@ -390,9 +388,10 @@ new ActiveMQConnectionFactory(brokerURL: brokerOrBashCompletion?.brokerDependent
             }
 
             if (outputType() == OUTPUT.TABLE) {
-                printOutput(System.out, outputType(), forwardedMessages, "\nForwarded messages\n", "Destination: ${forwardDependent.forward}")
+                printOutput(System.out, outputType(), forwardedMessages, ansiString("\nForwarded @|bold,white ${forwardedMessages.size()} ${(forwardedMessages.size() > 1) ? 'messages' : 'message'}|@"),
+                        ansiString("Destination: @|bold,yellow ${forwardDependent.forward}|@\n"))
             } else {
-                cli().err.println "Forwarded ${forwardedMessages.size()} ${(forwardedMessages.size() > 1) ? 'messages' : 'message'}"
+                cli().err.println ansiString("Forwarded @|bold,white ${forwardedMessages.size()} ${(forwardedMessages.size() > 1) ? 'messages' : 'message'}|@")
             }
         } else {
             cli().err.println "Forward target invalid: ${forwardDependent.forward}"
