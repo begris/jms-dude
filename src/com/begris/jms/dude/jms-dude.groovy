@@ -37,16 +37,28 @@ import java.time.Instant
 
 // PicocliBaseScript prints usage help or version if requested by the user
 
+class UserDependent {
+    @CommandLine.Option(order = 2, names = ["-u", "--user"], description = "User for AMQ", required = true)
+    String user
+
+    @CommandLine.Option(order = 3, names = ["-P", "--password"], description = "Password for AMQ", arity = "0..1", interactive = true)
+    char[] password
+}
+
+class CredentialDependent {
+    @CommandLine.ArgGroup(exclusive = false, multiplicity = '0..1')
+    UserDependent userDependent
+
+    @CommandLine.Option(order = 3, names = ["--credential"], description = "Credential file for AMQ - format: @|italic <username>:<password>|@", arity = "1", paramLabel = 'FILE')
+    File credentialFile
+}
 
 class BrokerDependent {
     @CommandLine.Option(order = 1, names = ["-b", "--broker"], description = "AMQ broker url to query", required = true)
     String brokerUrl
 
-    @CommandLine.Option(order = 2, names = ["-u", "--user"], description = "User for AMQ")
-    String user
-
-    @CommandLine.Option(order = 3, names = ["-P", "--password"], description = "Password for AMQ", arity = "0..1", interactive = true)
-    char[] password
+    @CommandLine.ArgGroup(order = 2, exclusive = true, multiplicity = '0..1')
+    CredentialDependent credentialDependent
 
     @CommandLine.Option(order = 4, names = ["-q", "--queue"], description = "The queue to browse", required = true)
     String queue
@@ -114,19 +126,62 @@ class ExclusiveOutput {
 @CommandLine.Parameters(paramLabel = 'FILE', arity = '0..1', description = 'messages to send')
 @Field File[] messageFiles
 
+def user
+def pwd
+
 // the CommandLine that parsed the args is available as a property
 assert this.commandLine.commandName == "jms-dude"
 
 def cli = { -> (CommandLine) this.commandLine }
+def ansiString = { String text -> CommandLine.Help.Ansi.AUTO.string(text) }
 
 if (brokerOrBashCompletion.autoCompletion) {
 
     print AutoComplete.bash(cli().commandName, cli())
     System.exit 0
 }
-
 //assert brokerDependent != null
 
+def useCredentialFile = {
+    -> !(brokerOrBashCompletion?.brokerDependent?.credentialDependent?.credentialFile == null)
+}
+
+def getCredentials = {
+    ->
+    def file = brokerOrBashCompletion?.brokerDependent?.credentialDependent?.credentialFile
+    if(!file.exists()) {
+        cli().err.println ansiString("@|bold,red Credential file not found ${file.name}.|@ @|bold,red,italic Expected format <username>:<password>!|@".toString())
+        System.exit 1
+    }
+    def matcher = brokerOrBashCompletion?.brokerDependent?.credentialDependent?.credentialFile.text.trim() =~ /(?<user>[^:]+):(?<pwd>.+)/
+    if(matcher.matches()) {
+        user = matcher.group('user')
+        pwd = matcher.group('pwd').toCharArray()
+    } else {
+        cli().err.println ansiString("@|bold,red,blink Invalid credential file. @|italic Expected format <username>:<password>!|@|@")
+        System.exit 1
+    }
+}
+
+if(useCredentialFile()) {
+    getCredentials()
+}
+
+def getUser = {
+    if(useCredentialFile) {
+        user
+    } else {
+        brokerOrBashCompletion?.brokerDependent?.credentialDependent?.userDependent?.user
+    }
+}
+
+def getPassword = {
+    if(useCredentialFile) {
+        pwd
+    } else {
+        brokerOrBashCompletion?.brokerDependent?.credentialDependent?.userDependent?.password
+    }
+}
 
 def selectorAvailable = { -> !(forwardDependent?.selector == null || forwardDependent?.selector?.isBlank()) }
 
@@ -198,8 +253,6 @@ def retrieveBody = {
         }
 }
 
-def ansiString = { String text -> CommandLine.Help.Ansi.AUTO.string(text) }
-
 enum OUTPUT {
     TABLE, JSON, DUMP
 }
@@ -230,7 +283,7 @@ def outputTable = {
                 row.addContent(++index, message.JMSMessageID, message.JMSType, message.JMSCorrelationID, Instant.ofEpochMilli(message.JMSTimestamp), retrieveProperties(message) )
         }
         table.print(stream)
-        
+
         stream.println "\n${messages.size()} ${(messages.size() > 1) ? 'messages' : 'message'} selected"
         stream.println ""
 }
@@ -353,7 +406,7 @@ def createCopy = {
 }
 
 new ActiveMQConnectionFactory(brokerURL: brokerOrBashCompletion?.brokerDependent?.brokerUrl)
-        .createQueueConnection(brokerOrBashCompletion?.brokerDependent?.user, brokerOrBashCompletion?.brokerDependent?.password?.toString()).with {
+        .createQueueConnection(getUser(), getPassword().toString()).with {
     start()
     Session session = createSession(true, Session.CLIENT_ACKNOWLEDGE)
     def jmsQueue = session.createQueue(brokerOrBashCompletion?.brokerDependent?.queue)
