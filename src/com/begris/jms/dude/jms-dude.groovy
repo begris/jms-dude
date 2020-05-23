@@ -229,8 +229,9 @@ def outputTable = {
                 def row = table.addRow()
                 row.addContent(++index, message.JMSMessageID, message.JMSType, message.JMSCorrelationID, Instant.ofEpochMilli(message.JMSTimestamp), retrieveProperties(message) )
         }
-
         table.print(stream)
+        
+        stream.println "\n${messages.size()} ${(messages.size() > 1) ? 'messages' : 'message'} selected"
         stream.println ""
 }
 
