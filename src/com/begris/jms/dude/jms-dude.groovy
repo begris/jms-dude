@@ -211,6 +211,7 @@ def outputType = { ->
 def outputTable = {
     PrintStream stream, messages, String... header ->
         ShellTable table = new ShellTable().emptyTableText("no messages found")
+        table.column("No.").alignRight()
         table.column("JMSMessageId").alignLeft()
         table.column("JMSType").alignLeft()
         table.column("JMSCorrelationId").alignLeft()
@@ -223,10 +224,10 @@ def outputTable = {
             }
         }
 
-        messages.each {
-            Message message ->
+        messages.eachWithIndex {
+            Message message, index ->
                 def row = table.addRow()
-                row.addContent(message.JMSMessageID, message.JMSType, message.JMSCorrelationID, Instant.ofEpochMilli(message.JMSTimestamp), retrieveProperties(message) )
+                row.addContent(++index, message.JMSMessageID, message.JMSType, message.JMSCorrelationID, Instant.ofEpochMilli(message.JMSTimestamp), retrieveProperties(message) )
         }
 
         table.print(stream)
@@ -294,7 +295,7 @@ def copyHeaderAndProperties = {
 
         if(exclusiveProperties != null) {
             if(exclusiveProperties.allProperties) {
-                propertiesToCopy = oldMessage.properties.iterator().collect { it }
+                propertiesToCopy = oldMessage.properties.collect { it.key }
             } else if (!exclusiveProperties?.propertyList?.isEmpty()) {
                 exclusiveProperties.propertyList.each {
                     pattern ->
