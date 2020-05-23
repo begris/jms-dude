@@ -241,10 +241,10 @@ def outputJson = {
         def messageMap = messages.collectEntries {
             Message msg ->
                 [(msg): [
-                        JMSMessageId    : msg.JMSMessageID,
+                        JMSMessageID    : msg.JMSMessageID,
                         JMSType         : msg.JMSType,
                         JMSDestination  : "${printDestination(msg.JMSDestination)}",
-                        JMSCorrelationId: msg.JMSCorrelationID,
+                        JMSCorrelationID: msg.JMSCorrelationID,
                         JMSTimestamp    : msg.JMSTimestamp,
                         JMSTimestampUTC : Instant.ofEpochMilli(msg.JMSTimestamp).toString(),
                         JMSExpiration   : msg.JMSExpiration,
