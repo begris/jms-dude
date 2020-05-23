@@ -198,6 +198,8 @@ def retrieveBody = {
         }
 }
 
+def ansiString = { String text -> CommandLine.Help.Ansi.AUTO.string(text) }
+
 enum OUTPUT {
     TABLE, JSON, DUMP
 }
