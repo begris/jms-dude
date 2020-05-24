@@ -1,0 +1,22 @@
+name: Create bundle
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  zip-files:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: olegtarasov/get-tag@v2
+        id: tagName
+      - uses: papeloto/action-zip@v1
+        with:
+          files: src/com/begris/jms/dude/jms-dude.groovy README.md LICENSE
+          dest: jms-dude-${{steps.tagName.outputs.tag}}.zip
+      - uses: AButler/upload-release-assets@v2.0
+        with:
+          files: jms-dude-${{ steps.tagName.outputs.tag }}.zip
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          
