@@ -32,7 +32,7 @@ dude_bin_folder="${JMSDUDE_HOME}/bin"
 dude_tmp_folder="${JMSDUDE_HOME}/tmp"
 dude_zip_file="${dude_tmp_folder}/jms-dude-${JMSDUDE_VERSION}.zip"
 dude_release_folder="${JMSDUDE_HOME}/${JMSDUDE_VERSION}"
-dude_script_file="${dude_bin_folder}/jms-dude.groovy"
+dude_script_file="${dude_release_folder}/jms-dude.groovy"
 dude_command="${dude_bin_folder}/jms-dude"
 dude_init="${dude_bin_folder}/jms-dude-init.sh"
 dude_completion="${dude_bin_folder}/jms-dude_completion.sh"
@@ -128,6 +128,7 @@ fi
 echo "Installing jms-dude version ${JMSDUE_VERSION}"
 
 echo "Create distribution directories..."
+mkdir -p "$dude_bin_folder"
 mkdir -p "$dude_tmp_folder"
 
 echo "Download installation archive..."
@@ -151,9 +152,8 @@ fi
 unzip -qo "$dude_zip_file" -d "$dude_release_folder"
 
 echo "Install scripts..."
-unlink "$dude_bin_folder"
-ln -s "$dude_release_folder" "$dude_bin_folder"
-chmod +x "$dude_script_file"
+chmod u+x "$dude_script_file"
+unlink "$dude_command"
 ln -s "$dude_script_file" "$dude_command"
 
 echo "Generate init script..."
@@ -161,7 +161,7 @@ echo -e "\n$dude_init_script" > "$dude_init"
 
 
 echo "Generate bash-completion script for version ${JMSDUDE_VERSION}..."
-groovy "$dude_script_file" "--auto-completion" >> "$dude_completion"
+groovy "$dude_script_file" "--auto-completion" > "$dude_completion"
 
 if [[ $darwin == true ]]; then
   touch "$dude_bash_profile"
