@@ -22,7 +22,7 @@
 #      SOFTWARE.
 
 JMSDUDE_VERSION="v1.0.0"
-JMSDUDE_DOWNLOAD="https://github.com/begris/test/releases/download/${JMSDUDE_VERSION}/jms-dude-${JMSDUDE_VERSION}.zip"
+JMSDUDE_DOWNLOAD="https://github.com/begris/jms-dude/releases/download/${JMSDUDE_VERSION}/jms-dude-${JMSDUDE_VERSION}.zip"
 
 if [ -z "$JMSDUDE_HOME" ]; then
     JMSDUDE_HOME="$HOME/.jms-dude"
