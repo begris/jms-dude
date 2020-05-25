@@ -21,7 +21,7 @@
 #      OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 #      SOFTWARE.
 
-JMSDUDE_VERSION="v1.0.0"
+JMSDUDE_VERSION="v1.0.1"
 JMSDUDE_DOWNLOAD="https://github.com/begris/jms-dude/releases/download/${JMSDUDE_VERSION}/jms-dude-${JMSDUDE_VERSION}.zip"
 
 if [ -z "$JMSDUDE_HOME" ]; then
