@@ -1,4 +1,4 @@
-#!/bin/groovy
+#!/usr/bin/env groovy
 package com.begris.jms.dude
 
 import org.apache.activemq.command.ActiveMQBlobMessage
