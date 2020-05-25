@@ -190,7 +190,7 @@ echo -e "\n\n\nAll done!\n\n"
 
 echo "Please open a new terminal, or run the following in the existing one:"
 echo ""
-echo "    source \"${JMSDUDE_HOMEDIR}/bin/jms-dude-init.sh\""
+echo "    source \"${JMSDUDE_HOME}/bin/jms-dude-init.sh\""
 echo ""
 echo "Then issue the following command:"
 echo ""
